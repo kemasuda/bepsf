@@ -22,6 +22,8 @@ class GridPSFModel:
         ygrid_edge = jnp.linspace(-0.5*dy, (Ny-0.5)*dy, Ny+1)
         xgrid_center = 0.5 * (xgrid_edge[1:] + xgrid_edge[:-1])
         ygrid_center = 0.5 * (ygrid_edge[1:] + ygrid_edge[:-1])
+        self.xmin, self.xmax = xgrid_edge.min(), xgrid_edge.max()
+        self.ymin, self.ymax = ygrid_edge.min(), ygrid_edge.max()
         xm, ym = jnp.median(xgrid_center), jnp.median(ygrid_center)
         self.xgrid_edge = xgrid_edge - xm
         self.xgrid_center = xgrid_center - xm
@@ -29,6 +31,7 @@ class GridPSFModel:
         self.ygrid_center = ygrid_center - ym
         self.dx = dx
         self.dy = dy
+        self.ds = dx * dy
         self.Nx = Nx
         self.Ny = Ny
         self.Nparams = Nx * Ny

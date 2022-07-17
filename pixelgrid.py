@@ -17,6 +17,7 @@ class PixelGrid:
         self.ygrid_edge = jnp.linspace(ymin, ymax, self.Ny+1)
         self.xgrid_center = 0.5 * (self.xgrid_edge[1:] + self.xgrid_edge[:-1])
         self.ygrid_center = 0.5 * (self.ygrid_edge[1:] + self.ygrid_edge[:-1])
+        self.ds = dx * dy
 
         X, Y = jnp.meshgrid(self.xgrid_center, self.ygrid_center)
         self.X = X
