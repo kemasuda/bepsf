@@ -51,3 +51,9 @@ class GridPSFModel:
         yidx = (Y - ycenter - self.ygrid_center[0]) / self.dy
         Z = params.reshape(self.Nx, self.Ny)
         return map_coordinates(Z, [xidx, yidx], order=1)
+    
+    @partial(jit, static_argnums=(0,))
+    def psfvalues1d(self, X, Y, xcenter, ycenter, params):
+        """ same as psfvalues when reshaped to len(X),len(Y) """
+        values1d = self.psfvalues(X, Y, xcenter, ycenter, params).ravel()
+        return values1d
