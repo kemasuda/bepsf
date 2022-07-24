@@ -1,2 +1,2 @@
 # bepsf
-Bayesian ePSF modeling
+Bayesian ePSF modeling :checkered_flag:
