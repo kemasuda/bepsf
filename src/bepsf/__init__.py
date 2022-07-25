@@ -7,7 +7,7 @@ __email__ = ""
 __license__ = "MIT"
 __description__ = "Bayesian PSF modeling"
 
-from . import synthegrid
-from . import specfit
-from . import specfitmulti
-from . import numpyro_model
+from . import image
+from . import psfmodel
+from . import utils
+from . import infer

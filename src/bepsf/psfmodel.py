@@ -5,6 +5,7 @@ from jax.scipy.ndimage import map_coordinates
 from jax import jit
 from functools import partial
 from jax import vmap
+import numpyro.distributions as dist
 
 
 class GridPSFModel:
@@ -74,3 +75,56 @@ class GridPSFModel:
         func_tmatrix = vmap(psfvalues1d_vmap, (None,None,0,0,None), 0) # map along xcenter, ycenter
         Ts = norms[:,None,None] * func_tmatrix(X, Y, xcenters, ycenters, self.eye) # Nsource, Nsuperpix, Npsfpix
         return jnp.sum(Ts, axis=0)
+    
+    def gp_marginal(self, fluxes, xcenters, ycenters, lenx, leny, amp2, 
+                image_obs, sigma_err, image_super, S, return_pred=False):
+        cov_f = gpkernel(self.X1d, self.Y1d, lenx, leny, amp2)
+        T = self.translation_matrix(image_super.X, image_super.Y, fluxes, xcenters, ycenters)
+        U = jnp.dot(S, T)
+        cov_d = sigma_err**2 * jnp.eye(image_obs.size)
+
+        if return_pred:
+            """ mean prediction for the PSF & image vectors """
+            Sigma_pred = cov_f - cov_f@U.T@jnp.linalg.inv(cov_d+U@cov_f@U.T)@U@cov_f
+            prec_d = 1. / sigma_err**2 * jnp.eye(image_obs.size)
+            mu_pred = Sigma_pred@U.T@prec_d@image_obs.Z1d
+            return mu_pred, U@mu_pred #Sigma_pred
+
+        cov = jnp.dot(U, jnp.dot(cov_f, U.T)) + cov_d
+        mv = dist.MultivariateNormal(loc=0., covariance_matrix=cov)
+        return mv.log_prob(image_obs.Z1d)
+
+        # same but slower
+        #SinvZ = jnp.linalg.solve(cov, image_obs.Z1d)
+        #return -0.5 * jnp.linalg.slogdet(cov)[1] - 0.5 * jnp.dot(image_obs.Z1d.T, SinvZ) - 0.5 * image_obs.size * jnp.log(2*jnp.pi)
+        
+def gpkernel(X1d, Y1d, lenx, leny, amp2):
+    dx = X1d[:,None] - X1d[None,:]
+    dy = Y1d[:,None] - Y1d[None,:]
+    dx2 = jnp.power(dx / lenx, 2.0)
+    dy2 = jnp.power(dy / leny, 2.0)
+    cov = amp2 * jnp.exp(-0.5*dx2-0.5*dy2)
+    return cov
+
+"""
+def gp_marginal(gridpsf, p, p_anchor, idx_anchor, image_obs, sigma_err, image_super, S, return_pred=False):
+    lnfluxes = jnp.r_[p['lnfluxes'][:idx_anchor], p_anchor['lnfluxes'], p['lnfluxes'][idx_anchor+1:]]
+    xcenters = jnp.r_[p['xcenters'][:idx_anchor], p_anchor['xcenters'], p['xcenters'][idx_anchor+1:]]
+    ycenters = jnp.r_[p['ycenters'][:idx_anchor], p_anchor['ycenters'], p['ycenters'][idx_anchor+1:]]
+    lenx, leny, amp2 = jnp.exp(p['lnlenx']), jnp.exp(p['lnleny']), jnp.exp(2*p['lnamp'])
+    cov_f = gpkernel(gridpsf.X1d, gridpsf.Y1d, lenx, leny, amp2)
+    T = gridpsf.translation_matrix(image_super.X, image_super.Y, jnp.exp(lnfluxes), xcenters, ycenters)
+    U = jnp.dot(S, T)
+    cov_d = sigma_err**2 * jnp.eye(image_obs.size)
+    
+    if return_pred:
+        # mean prediction for the PSF & image vectors
+        Sigma_pred = cov_f - cov_f@U.T@jnp.linalg.inv(cov_d+U@cov_f@U.T)@U@cov_f
+        prec_d = 1. / sigma_err**2 * jnp.eye(image_obs.size)
+        mu_pred = Sigma_pred@U.T@prec_d@image_obs.Z1d
+        return mu_pred, U@mu_pred #Sigma_pred
+    
+    cov = jnp.dot(U, jnp.dot(cov_f, U.T)) + cov_d
+    mv = dist.MultivariateNormal(loc=0., covariance_matrix=cov)
+    return mv.log_prob(image_obs.Z1d)
+"""
