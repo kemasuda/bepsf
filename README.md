@@ -1,2 +1,2 @@
 # bepsf
-Bayesian ePSF modeling :checkered_flag:
+Bayesian ePSF modeling :nazar_amulet:
