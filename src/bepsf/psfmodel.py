@@ -1,4 +1,4 @@
-__all__ = ["GridPSFModel"]
+__all__ = ["GridPSFModel", "super_to_obs"]
 
 import jax.numpy as jnp
 from jax.scipy.ndimage import map_coordinates
@@ -63,40 +63,55 @@ class GridPSFModel:
         Z = params.reshape(self.Nx, self.Ny)
         return map_coordinates(Z, [xidx, yidx], order=1)
 
-    @partial(jit, static_argnums=(0,))
-    def psfvalues1d(self, X, Y, xcenter, ycenter, params):
-        """ same as psfvalues when reshaped to len(X),len(Y) """
-        values1d = self.psfvalues(X, Y, xcenter, ycenter, params).ravel()
-        return values1d
+    @partial(jit, static_argnums=(0,4,5))
+    def get_obs1d(self, norms, xcenters, ycenters, image_obs, image_super, params):
+        psfvalues_vmap_sources = vmap(self.psfvalues, (None,None,0,0,None), 0)
+        ims_super = psfvalues_vmap_sources(image_super.X, image_super.Y, xcenters, ycenters, params)
+        im_super = jnp.sum(norms[:,None,None] * ims_super, axis=0)
+        im_obs1d = super_to_obs(im_super, image_obs).ravel()
+        return im_obs1d
 
-    @partial(jit, static_argnums=(0,))
-    def translation_matrix(self, X, Y, norms, xcenters, ycenters):
-        psfvalues1d_vmap = vmap(self.psfvalues1d, (None,None,None,None,0), 1) # map along params axis
-        func_tmatrix = vmap(psfvalues1d_vmap, (None,None,0,0,None), 0) # map along xcenter, ycenter
-        Ts = norms[:,None,None] * func_tmatrix(X, Y, xcenters, ycenters, self.eye) # Nsource, Nsuperpix, Npsfpix
-        return jnp.sum(Ts, axis=0)
+    # 1.5x faster than U@translation_matrix for Nx,Ny=(30,30) and super_factor=3
+    @partial(jit, static_argnums=(0,4,5))
+    def U_matrix(self, norms, xcenters, ycenters, image_obs, image_super):
+        get_obs1d_vmap = vmap(self.get_obs1d, (None,None,None,None,None,0), 1)
+        return get_obs1d_vmap(norms, xcenters, ycenters, image_obs, image_super, self.eye)
     
     def gp_marginal(self, fluxes, xcenters, ycenters, lenx, leny, amp2, 
-                image_obs, sigma_err, image_super, S, return_pred=False):
+                image_obs, image_err, image_super, return_pred=False):
+        mask1d = image_obs.mask1d
+        
         cov_f = gpkernel(self.X1d, self.Y1d, lenx, leny, amp2)
-        T = self.translation_matrix(image_super.X, image_super.Y, fluxes, xcenters, ycenters)
-        U = jnp.dot(S, T)
-        cov_d = sigma_err**2 * jnp.eye(image_obs.size)
+        Unomask = self.U_matrix(fluxes, xcenters, ycenters, image_obs, image_super)
+        U = Unomask[~mask1d]
+        #cov_d = sigma_err**2 * jnp.eye(image_obs.size)
+        image_err1d = image_err.ravel()[~mask1d]
+        cov_d = jnp.diag(image_err1d**2)
+        obs1d = image_obs.Z1d[~mask1d]
 
         if return_pred:
             """ mean prediction for the PSF & image vectors """
             Sigma_pred = cov_f - cov_f@U.T@jnp.linalg.inv(cov_d+U@cov_f@U.T)@U@cov_f
-            prec_d = 1. / sigma_err**2 * jnp.eye(image_obs.size)
-            mu_pred = Sigma_pred@U.T@prec_d@image_obs.Z1d
-            return mu_pred, U@mu_pred #Sigma_pred
+            #prec_d = 1. / sigma_err**2 * jnp.eye(image_obs.size)
+            prec_d = jnp.diag(1./image_err1d**2)
+            mu_pred = Sigma_pred@U.T@prec_d@obs1d
+            return mu_pred, Unomask@mu_pred #Sigma_pred
 
         cov = jnp.dot(U, jnp.dot(cov_f, U.T)) + cov_d
         mv = dist.MultivariateNormal(loc=0., covariance_matrix=cov)
-        return mv.log_prob(image_obs.Z1d)
+        return mv.log_prob(obs1d)
 
         # same but slower
         #SinvZ = jnp.linalg.solve(cov, image_obs.Z1d)
-        #return -0.5 * jnp.linalg.slogdet(cov)[1] - 0.5 * jnp.dot(image_obs.Z1d.T, SinvZ) - 0.5 * image_obs.size * jnp.log(2*jnp.pi)
+        #return -0.5 * jnp.linalg.slogdet(cov)[1] \
+        #    - 0.5 * jnp.dot(image_obs.Z1d.T, SinvZ) - 0.5 * image_obs.size * jnp.log(2*jnp.pi)
+
+def super_to_obs(Z_super, Z_obs):
+    # convert 2d supersampled image Z_super (Ms,Ns) to 2d undersampled image Z_obs (Mobs,Nobs)
+    Ms, Ns = Z_super.shape
+    Mobs, Nobs = Z_obs.shape
+    K, L = Ms // Mobs, Ns // Nobs
+    return Z_super[:Mobs*K, :Nobs*L].reshape(Mobs, K, Nobs, L).sum(axis=(1, 3))
         
 def gpkernel(X1d, Y1d, lenx, leny, amp2):
     dx = X1d[:,None] - X1d[None,:]
@@ -107,6 +122,19 @@ def gpkernel(X1d, Y1d, lenx, leny, amp2):
     return cov
 
 """
+@partial(jit, static_argnums=(0,))
+def psfvalues1d(self, X, Y, xcenter, ycenter, params):
+    # same as psfvalues when reshaped to len(X),len(Y)
+    values1d = self.psfvalues(X, Y, xcenter, ycenter, params).ravel()
+    return values1d
+
+@partial(jit, static_argnums=(0,))
+def translation_matrix(self, X, Y, norms, xcenters, ycenters):
+    psfvalues1d_vmap = vmap(self.psfvalues1d, (None,None,None,None,0), 1) # map along params axis
+    func_tmatrix = vmap(psfvalues1d_vmap, (None,None,0,0,None), 0) # map along xcenter, ycenter
+    Ts = norms[:,None,None] * func_tmatrix(X, Y, xcenters, ycenters, self.eye) # Nsource, Nsuperpix, Npsfpix
+    return jnp.sum(Ts, axis=0)
+    
 def gp_marginal(gridpsf, p, p_anchor, idx_anchor, image_obs, sigma_err, image_super, S, return_pred=False):
     lnfluxes = jnp.r_[p['lnfluxes'][:idx_anchor], p_anchor['lnfluxes'], p['lnfluxes'][idx_anchor+1:]]
     xcenters = jnp.r_[p['xcenters'][:idx_anchor], p_anchor['xcenters'], p['xcenters'][idx_anchor+1:]]

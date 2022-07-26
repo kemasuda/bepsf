@@ -8,7 +8,7 @@ import numpyro
 import numpyro.distributions as dist
 from numpyro.infer import init_to_value
 
-def optimize_flux_and_position(gridpsf, image_obs, image_obs_err, image_super, S,
+def optimize_flux_and_position(gridpsf, image_obs, image_err, image_super,
                                lnfluxes_guess, xcenters_guess, ycenters_guess, idx_anchor, method="TNC", n_iter=1, radius=3.,
                                lnfluxlim=[-10.,2.], xyclim=[-2.,2.], lnlenxlim=[0,0], lnlenylim=[0,0], lnamplim=[-5.,0.]):
 
@@ -38,7 +38,7 @@ def optimize_flux_and_position(gridpsf, image_obs, image_obs_err, image_super, S
         ycenters = jnp.r_[p['ycenters'][:idx_anchor], ycenters_guess[idx_anchor], p['ycenters'][idx_anchor+1:]]
         lenx, leny, amp2 = jnp.exp(p['lnlenx']), jnp.exp(p['lnleny']), jnp.exp(2*p['lnamp'])
         return -gridpsf.gp_marginal(fluxes, xcenters, ycenters, lenx, leny, amp2, 
-                                    image_obs, image_obs_err, image_super, S)
+                                    image_obs, image_err, image_super)
         
     solver = jaxopt.ScipyBoundedMinimize(fun=objective, method=method)
 
@@ -50,7 +50,7 @@ def optimize_flux_and_position(gridpsf, image_obs, image_obs_err, image_super, S
         
     return res#, S
 
-def numpyro_model(gridpsf, image_obs, image_err, image_super, S, idx_anchor, popt):
+def numpyro_model(gridpsf, image_obs, image_err, image_super, idx_anchor, popt):
     lnlenx = numpyro.sample("lnlenx", dist.Uniform(low=popt['lnlenx']-2, high=popt['lnlenx']+2)) 
     lnleny = numpyro.sample("lnleny", dist.Uniform(low=popt['lnleny']-2, high=popt['lnleny']+2))
     lna = numpyro.sample("lna", dist.Uniform(low=popt['lnamp']-5, high=popt['lnamp']+2))
@@ -65,15 +65,15 @@ def numpyro_model(gridpsf, image_obs, image_err, image_super, S, idx_anchor, pop
     ycenters = jnp.r_[y[:idx_anchor], popt['ycenters'][idx_anchor], y[idx_anchor:]]
 
     gploglike = gridpsf.gp_marginal(fluxes, xcenters, ycenters, lenx, leny, amp2, 
-                            image_obs, image_err, image_super, S)
+                            image_obs, image_err, image_super)
 
     numpyro.factor("gploglike", gploglike)
 
-def run_hmc(gridpsf, image_obs, image_err, image_super, S, idx_anchor, popt, nw=500, ns=500, target_accept_prob=0.90):
+def run_hmc(gridpsf, image_obs, image_err, image_super, idx_anchor, popt, nw=500, ns=500, target_accept_prob=0.90):
     init_strategy = init_to_value(values=popt)
     kernel = numpyro.infer.NUTS(numpyro_model, target_accept_prob=target_accept_prob, init_strategy=init_strategy)
     mcmc = numpyro.infer.MCMC(kernel, num_warmup=nw, num_samples=ns)
     rng_key = random.PRNGKey(0)
-    mcmc.run(rng_key, gridpsf, image_obs, image_err, image_super, S, idx_anchor, popt)
+    mcmc.run(rng_key, gridpsf, image_obs, image_err, image_super, idx_anchor, popt)
     mcmc.print_summary()
     return mcmc
