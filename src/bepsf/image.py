@@ -1,4 +1,4 @@
-__all__ = ["PixelImage"]
+_all__ = ["PixelImage"]
 
 import jax.numpy as jnp
 import numpy as np
@@ -30,7 +30,7 @@ class PixelImage:
         self.X1d = jnp.tile(self.xgrid_center, self.Ny)
         self.Y1d = jnp.repeat(self.ygrid_center, self.Nx)
         self.Z = -1 * jnp.ones_like(X)
-        self.mask = self.X**2 < 0.
+        self.mask = np.array(X)**2 < 0.
         self.mask1d = self.mask.ravel()
 
     @property
