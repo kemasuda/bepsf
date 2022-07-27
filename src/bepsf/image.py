@@ -1,4 +1,4 @@
-_all__ = ["PixelImage"]
+_all__ = ["PixelImage", "super_to_obs"]
 
 import jax.numpy as jnp
 import numpy as np
@@ -47,8 +47,7 @@ class PixelImage:
         mask = mask1d.reshape(*self.shape)
         self.mask = mask
         self.mask1d = mask1d
-
-"""
+        
 def super_to_obs(Z_super, Z_obs):
     # convert 2d supersampled image Z_super (Ms,Ns) to 2d undersampled image Z_obs (Mobs,Nobs)
     Ms, Ns = Z_super.shape
@@ -56,6 +55,7 @@ def super_to_obs(Z_super, Z_obs):
     K, L = Ms // Mobs, Ns // Nobs
     return Z_super[:Mobs*K, :Nobs*L].reshape(Mobs, K, Nobs, L).sum(axis=(1, 3))
 
+"""
 def supersampling_matrix(image_super, image_obs):
     # matrix to convert 1d supersampled image (Ms*Ns,) to 1d understampled image (Mobs*Nobs,)
     Ms, Ns = image_super.shape

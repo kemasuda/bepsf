@@ -90,7 +90,7 @@ def check_image_fit(image_obs, image_err, image_pred):
     ylim = ax[1].get_ylim()
     ax[1].set_yscale("log")
     ax[1].set_xlim(-5,5)
-    ax[1].set_ylim(ylim)
+    ax[1].set_ylim(ylim[0], ylim[1]*1.2)
     x0 = np.linspace(-5, 5, 100)
     ax[1].plot(x0, np.exp(-0.5*x0**2)/np.sqrt(2*np.pi), color='gray', lw=1)
     ax[1].set_xlabel("residual normalized by error");
