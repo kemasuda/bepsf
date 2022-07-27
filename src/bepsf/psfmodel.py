@@ -62,16 +62,19 @@ class GridPSFModel:
         yidx = (Y - ycenter - self.ygrid_center[0]) / self.dy
         Z = params.reshape(self.Nx, self.Ny)
         return map_coordinates(Z, [xidx, yidx], order=1)
-
+    
     @partial(jit, static_argnums=(0,4,5))
     def get_obs1d(self, norms, xcenters, ycenters, image_obs, image_super, params):
         psfvalues_vmap_sources = vmap(self.psfvalues, (None,None,0,0,None), 0)
-        ims_super = psfvalues_vmap_sources(image_super.X, image_super.Y, xcenters, ycenters, params)
-        im_super = jnp.sum(norms[:,None,None] * ims_super, axis=0)
+        #ims_super = psfvalues_vmap_sources(image_super.X, image_super.Y, xcenters, ycenters, params)
+        #im_super = jnp.sum(norms[:,None,None] * ims_super, axis=0)
+        mask1d = image_super.mask1d
+        ims_super1d_unmasked = jnp.sum(norms[:,None]*psfvalues_vmap_sources(image_super.X1d[~mask1d], image_super.Y1d[~mask1d], xcenters, ycenters, params), axis=0)
+        im_super = jnp.zeros(len(mask1d)).at[~mask1d].set(ims_super1d_unmasked)
+        im_super = im_super.reshape(image_super.shape)
         im_obs1d = super_to_obs(im_super, image_obs).ravel()
         return im_obs1d
 
-    # 1.5x faster than U@translation_matrix for Nx,Ny=(30,30) and super_factor=3
     @partial(jit, static_argnums=(0,4,5))
     def U_matrix(self, norms, xcenters, ycenters, image_obs, image_super):
         get_obs1d_vmap = vmap(self.get_obs1d, (None,None,None,None,None,0), 1)
@@ -128,6 +131,7 @@ def psfvalues1d(self, X, Y, xcenter, ycenter, params):
     values1d = self.psfvalues(X, Y, xcenter, ycenter, params).ravel()
     return values1d
 
+# U@T is 1.5x slower than U_matrix for Nx,Ny=(30,30) and super_factor=3
 @partial(jit, static_argnums=(0,))
 def translation_matrix(self, X, Y, norms, xcenters, ycenters):
     psfvalues1d_vmap = vmap(self.psfvalues1d, (None,None,None,None,0), 1) # map along params axis
