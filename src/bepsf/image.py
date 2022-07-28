@@ -29,16 +29,37 @@ class PixelImage:
         self.Y = Y
         self.X1d = jnp.tile(self.xgrid_center, self.Ny)
         self.Y1d = jnp.repeat(self.ygrid_center, self.Nx)
-        self.Z = -1 * jnp.ones_like(X)
+        self.Z = None #-1 * jnp.ones_like(X) # in case Z.shape is needed
+        self.Zerr = None
         self.mask = np.array(X)**2 < 0.
         self.mask1d = self.mask.ravel()
+        
+        self.xinit = None
+        self.yinit = None
+        self.lnfinit = None
 
     @property
     def Z1d(self):
         return self.Z.ravel()
+    
+    @property
+    def Zerr1d(self):
+        return self.Zerr.ravel()
+    
+    @property
+    def finit(self):
+        return np.exp(self.lnfinit)
 
-    def aperture_flux(self, xc, yc, radius):
-        return np.sqrt((self.X-xc)**2+(self.Y-yc)**2) < radius
+    def circular_aperture_index(self, xc, yc, radius):
+        return jnp.sqrt((self.X-xc)**2+(self.Y-yc)**2) < radius
+    
+    def aperture_photometry(self, xcenters, ycenters, radius):
+        def single(x, y, radius):
+            idx_ap = self.circular_aperture_index(x, y, radius)
+            flux_ap = jnp.where(idx_ap, self.Z, self.Z*0.)
+            return jnp.sum(flux_ap), jnp.average(self.X, weights=flux_ap), jnp.average(self.Y, weights=flux_ap)
+        func = vmap(single, (0,0,None), 0)
+        return func(xcenters, ycenters, radius)
     
     def define_mask(self, xcenters, ycenters, limit_dist):
         distances = np.sqrt((self.X1d[None,:]-xcenters[:,None])**2 + (self.Y1d[None,:]-ycenters[:,None])**2) # Nsource, Npix

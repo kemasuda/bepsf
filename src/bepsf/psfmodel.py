@@ -46,6 +46,7 @@ class GridePSFModel:
         self.shape = (self.Nx, self.Ny)
         self.size = self.Nx * self.Ny
         self.eye = jnp.eye(self.size)
+        self.pixarea = (self.xgrid_edge.max()-self.xgrid_edge.min())*(self.ygrid_edge.max()-self.ygrid_edge.min())
 
         print ("PSF grid shape:", self.shape)
         print ("x centers:", self.xgrid_center)
