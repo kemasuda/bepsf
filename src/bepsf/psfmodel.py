@@ -62,7 +62,7 @@ class GridePSFModel:
         xidx = (X - xcenter - self.xgrid_center[0]) / self.dx
         yidx = (Y - ycenter - self.ygrid_center[0]) / self.dy
         Z = params.reshape(self.Nx, self.Ny)
-        return map_coordinates(Z, [xidx, yidx], order=1) / self.ds
+        return map_coordinates(Z, [xidx, yidx], order=1) #/ self.ds
     
     """
     @partial(jit, static_argnums=(0,4,))
