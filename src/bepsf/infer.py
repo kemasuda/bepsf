@@ -12,15 +12,9 @@ def optimize_flux_and_position(gridpsf, image_obs, image_err,
                                lnfluxes_guess, xcenters_guess, ycenters_guess, idx_anchor, method="TNC", n_iter=1, radius=3.,
                                lnfluxlim=[-10.,2.], xyclim=[-2.,2.], lnlenxlim=[0,0], lnlenylim=[0,0], lnamplim=[-3.,3.]):
 
-    #Zanchor_mean = np.mean(image_obs.Z[image_obs.aperture_flux(xcenters_guess[idx_anchor], ycenters_guess[idx_anchor], 3.)])
-    
-    #flux_ap = image_obs.Z[image_obs.aperture_flux(xcenters_guess[idx_anchor], ycenters_guess[idx_anchor], radius)]
-    #dfmedian = np.abs(np.median(np.diff(flux_ap)))
-    #lna_guess = np.log(dfmedian)
-    
     Npix = (gridpsf.xgrid_edge.max()-gridpsf.xgrid_edge.min())*(gridpsf.ygrid_edge.max()-gridpsf.ygrid_edge.min())
     lna_guess = -np.log(Npix)
-    print ("lna_guess:", lna_guess)
+    #print ("lna_guess:", lna_guess)
     
     p_init = {
         "lnfluxes": lnfluxes_guess,
