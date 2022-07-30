@@ -49,8 +49,10 @@ class GridePSFModel:
         self.pixarea = (self.xgrid_edge.max()-self.xgrid_edge.min())*(self.ygrid_edge.max()-self.ygrid_edge.min())
 
         print ("PSF grid shape:", self.shape)
-        print ("x centers:", self.xgrid_center)
-        print ("y centers:", self.ygrid_center)
+        #print ("x centers:", self.xgrid_center)
+        #print ("y centers:", self.ygrid_center)
+        print ("grid edge: x=[%f, %f], y=[%f, %f]"%(self.xgrid_edge[0], self.xgrid_edge[-1], self.ygrid_edge[0], self.ygrid_edge[-1]))
+        print ("grid center: x=%f, y=%f"%(np.median(self.xgrid_center), np.median(self.ygrid_center)))
 
     @partial(jit, static_argnums=(0,))
     def evaluate_ePSF(self, X, Y, xcenter, ycenter, params):
@@ -110,25 +112,28 @@ class GridePSFModel:
     def U_matrix(self, norms, xcenters, ycenters, X1d, Y1d):
         get_obs1d_vmap = vmap(self.get_obs1d, (None,None,None,None,None,0), 1)
         return get_obs1d_vmap(norms, xcenters, ycenters, X1d, Y1d, self.eye)
-    
-    def log_likelihood(self, fluxes, xcenters, ycenters, lenx, leny, amp2, obsX1d, obsY1d, obsZ1d, obserr1d):
+
+    def log_likelihood(self, fluxes, xcenters, ycenters, lenx, leny, amp2, mupsf, obsX1d, obsY1d, obsZ1d, obserr1d):
         cov_f = gpkernel(self.X1d, self.Y1d, lenx, leny, amp2)
         cov_d = jnp.diag(obserr1d**2)
         U = self.U_matrix(fluxes, xcenters, ycenters, obsX1d, obsY1d)
         
+        mean = jnp.dot(U, mupsf*jnp.ones_like(self.X1d))
         cov = jnp.dot(U, jnp.dot(cov_f, U.T)) + cov_d
-        mv = dist.MultivariateNormal(loc=0., covariance_matrix=cov)
+        mv = dist.MultivariateNormal(loc=mean, covariance_matrix=cov)
         
         return mv.log_prob(obsZ1d)
     
-    def predict_mean(self, fluxes, xcenters, ycenters, lenx, leny, amp2, obsX1d, obsY1d, obsZ1d, obserr1d):
+    def predict_mean(self, fluxes, xcenters, ycenters, lenx, leny, amp2, mupsf, obsX1d, obsY1d, obsZ1d, obserr1d):
         cov_f = gpkernel(self.X1d, self.Y1d, lenx, leny, amp2)
         cov_d = jnp.diag(obserr1d**2)
         U = self.U_matrix(fluxes, xcenters, ycenters, obsX1d, obsY1d)
         
-        Sigma_pred = cov_f - cov_f@U.T@jnp.linalg.inv(cov_d+U@cov_f@U.T)@U@cov_f
+        #Sigma_pred = cov_f - cov_f@U.T@jnp.linalg.inv(cov_d+U@cov_f@U.T)@U@cov_f
+        Sigma_Sfinv = jnp.eye(self.size) - cov_f@U.T@jnp.linalg.inv(cov_d+U@cov_f@U.T)@U
+        Sigma_pred = Sigma_Sfinv@cov_f
         prec_d = jnp.diag(1./obserr1d**2)
-        epsf_pred = Sigma_pred@U.T@prec_d@obsZ1d
+        epsf_pred = Sigma_pred@U.T@prec_d@obsZ1d + Sigma_Sfinv@(mupsf*jnp.ones(self.size))
         image_pred = U@epsf_pred
         
         return epsf_pred, image_pred
@@ -143,6 +148,16 @@ def gpkernel(X1d, Y1d, lenx, leny, amp2):
 
 
 """
+def log_likelihood(self, fluxes, xcenters, ycenters, lenx, leny, amp2, obsX1d, obsY1d, obsZ1d, obserr1d):
+    cov_f = gpkernel(self.X1d, self.Y1d, lenx, leny, amp2)
+    cov_d = jnp.diag(obserr1d**2)
+    U = self.U_matrix(fluxes, xcenters, ycenters, obsX1d, obsY1d)
+
+    cov = jnp.dot(U, jnp.dot(cov_f, U.T)) + cov_d
+    mv = dist.MultivariateNormal(loc=0., covariance_matrix=cov)
+
+    return mv.log_prob(obsZ1d)
+        
 def gp_marginal(self, fluxes, xcenters, ycenters, lenx, leny, amp2, image_obs, image_err, return_pred=False):
         mask1d = image_obs.mask1d
         

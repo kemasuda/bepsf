@@ -1,4 +1,4 @@
-__all__ = ["gaussian_sources", "gaussian_PSF", "compute_epsf", "plot_image", "drop_anchor", "check_solution", "check_ePSF_fit", "check_image_fit", "check_anchor"]
+__all__ = ["gaussian_sources", "gaussian_PSF", "compute_epsf", "plot_image", "choose_anchor", "drop_anchor", "check_solution", "check_mcmc_hyperparameters", "check_ePSF_fit", "check_image_fit", "check_anchor"]
 
 import matplotlib.pyplot as plt
 from mpl_toolkits.axes_grid1 import make_axes_locatable
@@ -6,6 +6,10 @@ import jax.numpy as jnp
 import numpy as np
 from jax import vmap
 from scipy.signal import convolve2d
+from scipy.stats import median_abs_deviation
+import corner
+import pandas as pd
+from arviz import plot_trace
 
 def plot_image(image, xcenters=None, ycenters=None, title=None):
     if image.Z is None:
@@ -52,22 +56,29 @@ def drop_anchor(p, idx_anchor, keys=['xcenters', 'ycenters', 'fluxes', 'lnfluxes
 
 def check_solution(image_obs, xcenters, ycenters, fluxes, p=None, samples=None):
     idx_anchor = image_obs.idx_anchor
-    xtrue = np.r_[xcenters[:idx_anchor], xcenters[idx_anchor+1:]]
-    ytrue = np.r_[ycenters[:idx_anchor], ycenters[idx_anchor+1:]]
-    ftrue = np.r_[fluxes[:idx_anchor], fluxes[idx_anchor+1:]] / fluxes[idx_anchor]
+    # truths are relative to the anchor values 
+    xtrue = np.r_[xcenters[:idx_anchor], xcenters[idx_anchor+1:]] - xcenters[idx_anchor]
+    ytrue = np.r_[ycenters[:idx_anchor], ycenters[idx_anchor+1:]] - ycenters[idx_anchor]
+    ftrue = np.log10(np.r_[fluxes[:idx_anchor], fluxes[idx_anchor+1:]]) - np.log10(fluxes[idx_anchor])
+    
+    x_anchor = image_obs.xinit[idx_anchor]
+    y_anchor = image_obs.yinit[idx_anchor]
+    f_anchor = np.log10(image_obs.finit[idx_anchor])
     
     if p is not None:
-        x, y, f = p['xcenters_drop'], p['ycenters_drop'], p['fluxes_drop']/image_obs.finit[idx_anchor] 
+        x, y, f = p['xcenters_drop'], p['ycenters_drop'], np.log10(p['fluxes_drop'])
         xerr, yerr, ferr = 0 * x, 0 * y, 0 * f
     elif samples is not None:
         x, xerr = np.mean(samples['x'], axis=0), np.std(samples['x'], axis=0)
         y, yerr = np.mean(samples['y'], axis=0), np.std(samples['y'], axis=0)
-        f, ferr = np.mean(samples['f'], axis=0), np.std(samples['f'], axis=0)
-        f_anchor = image_obs.finit[idx_anchor]
-        f /= f_anchor
-        ferr /= f_anchor
+        f, ferr = np.mean(np.log10(samples['f']), axis=0), np.std(np.log10(samples['f']), axis=0)
     else:
         return None
+    
+    x -= x_anchor
+    y -= y_anchor
+    f -= f_anchor
+    #ferr -= f_anchor
 
     dx, dy = x - xtrue, y - ytrue
     dmax = np.r_[np.abs(dx)+np.abs(xerr), np.abs(dy)+np.abs(yerr)].max()
@@ -85,10 +96,23 @@ def check_solution(image_obs, xcenters, ycenters, fluxes, p=None, samples=None):
     df = f - ftrue
     plt.figure(figsize=(8,4))
     plt.xlabel("true flux (relative to anchor)")
-    plt.ylabel("measured flux $-$ true flux")
+    plt.ylabel("$\Delta\log_{10}f$")
     plt.xscale("log")
     plt.axhline(y=0., color='gray')
-    plt.errorbar(ftrue, df, mfc='white', fmt='o', yerr=ferr, lw=1.);
+    plt.errorbar(10**ftrue, df, mfc='white', fmt='o', yerr=ferr, lw=1.,
+                 label="$\Delta \log_{10} f=%.3f\pm%.3f$"%(np.mean(df), np.std(df)))
+    plt.legend(loc='upper right');
+
+def check_mcmc_hyperparameters(mcmc, pnames = ['lnlenx', 'lnleny', 'lna']):
+    samples = mcmc.get_samples()
+    
+    if 'lnmu' in samples.keys():
+        pnames += ['lnmu']
+        
+    fig = plot_trace(mcmc, var_names=pnames)
+    
+    hyper = pd.DataFrame(data=dict(zip(pnames, [samples[k] for k in pnames])))
+    fig = corner.corner(hyper, labels=pnames, show_titles="%.2f")
 
 def check_ePSF_fit(grid, inferred, true):
     fig, ax = plt.subplots(1,3,figsize=(10,10))
@@ -110,7 +134,7 @@ def check_image_fit(image_obs, image_pred):
     divider = make_axes_locatable(ax[0])
     cax = divider.append_axes("right", size="5%", pad=0.1)
     plt.colorbar(im, cax=cax)
-    ax[0].imshow(image_obs.mask, alpha=0.1)
+    #ax[0].imshow(image_obs.mask, alpha=0.1)
     ax[0].set_title('data minus mean prediction')
     ax[0].set_xlim(image_obs.xgrid_edge[0], image_obs.xgrid_edge[-1])
     ax[0].set_ylim(image_obs.ygrid_edge[0], image_obs.ygrid_edge[-1])
@@ -134,6 +158,44 @@ def check_anchor(image_obs, idx_anchor=None, image_super=None):
     if image_super is not None:
          plot_image(image_super,  title='supersampled image (anchor idx: %d)'%idx_anchor, 
                     xcenters=xc, ycenters=yc)
+            
+def choose_anchor(image_obs, xcenters, ycenters, lnfluxes=None, mad_threshold=1., plot=False):
+    dx, dy = image_obs.xinit - xcenters, image_obs.yinit - ycenters
+    mad_dx = median_abs_deviation(dx)
+    mad_dy = median_abs_deviation(dy)
+    
+    for i in range(10):
+        idx_isolated = (np.abs(dx) < mad_dx * mad_threshold) & (np.abs(dy) < mad_dy * mad_threshold)
+        if lnfluxes is not None:
+            dlnf = image_obs.lnfinit - lnfluxes
+            mad_dlnf = median_abs_deviation(dlnf)
+            idx_isolated &= np.abs(dlnf) < mad_dlnf * mad_threshold
+        if np.sum(idx_isolated):
+            break
+        else:
+            mad_threshold *= 1.5
+    
+    idx_lnf_sorted = np.argsort(image_obs.lnfinit)[::-1]
+    idx_isolated_sorted = idx_isolated[idx_lnf_sorted]
+    idx_anchor = idx_lnf_sorted[idx_isolated_sorted][0]
+    
+    if plot:
+        plt.figure()
+        plt.xlabel("$\Delta x$")
+        plt.ylabel("$\Delta y$")
+        plt.plot(dx, dy, '.', color='gray', alpha=0.2)
+        plt.plot(dx[idx_isolated], dy[idx_isolated], '.', color='gray')
+        plt.plot(dx[idx_anchor], dy[idx_anchor], '.', color='salmon');
+
+        if lnfluxes is not None:
+            plt.figure()
+            plt.xlabel("$\ln f$")
+            plt.ylabel("$\Delta \ln f$")
+            plt.plot(lnfluxes, dlnf, '.', color='gray', alpha=0.2)
+            plt.plot(lnfluxes[idx_isolated], dlnf[idx_isolated], '.', color='gray')
+            plt.plot(lnfluxes[idx_anchor], dlnf[idx_anchor], '.', color='salmon');
+
+    return idx_anchor
             
 """
 def simulate_gaussian_sources(image, norms, xcenters, ycenters, sigma):
