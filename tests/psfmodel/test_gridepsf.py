@@ -28,6 +28,22 @@ def test_evaluate_psf():
     assert np.argmax(shifted_epsf) == 4237
     assert np.sum(shifted_epsf) == 49.
 
+def test_Umatrix():
+    from jax.config import config
+    config.update('jax_enable_x64', True)
+    path = pkg_resources.resource_filename('bepsf', 'data/')
+    data = np.load(path+"test_image.npz")
+    Z, Zerr, fluxes, xcenters, ycenters = data['Z'], data['Zerr'], data['fluxes'], data['xcenters'], data['ycenters']
+    im = PixelImage(Z.shape[0], Z.shape[1])
+    im.Z = Z
+    im.Zerr = Zerr
+    g = model()
+    lenx, leny = 1., 1.
+    amp2 = np.exp(-4.*2)
+    mupsf = 0.
+    U = g.U_matrix(fluxes, xcenters, ycenters, im.X1d, im.Y1d)
+    assert np.sum(U) == pytest.approx(1504.30322322)
+
 def test_loglikelihood():
     from jax.config import config
     config.update('jax_enable_x64', True)
@@ -48,4 +64,5 @@ def test_loglikelihood():
 if __name__ == '__main__':
     test_gridepsf_shape()
     test_evaluate_psf()
+    test_Umatrix()
     test_loglikelihood()
