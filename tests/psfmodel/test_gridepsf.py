@@ -29,6 +29,8 @@ def test_evaluate_psf():
     assert np.sum(shifted_epsf) == 49.
 
 def test_loglikelihood():
+    from jax.config import config
+    config.update('jax_enable_x64', True)
     path = pkg_resources.resource_filename('bepsf', 'data/')
     data = np.load(path+"test_image.npz")
     Z, Zerr, fluxes, xcenters, ycenters = data['Z'], data['Zerr'], data['fluxes'], data['xcenters'], data['ycenters']
