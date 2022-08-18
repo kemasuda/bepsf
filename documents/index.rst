@@ -13,8 +13,13 @@ Contents
 ==================================
 
 
-   
-   
+.. toctree::
+   :maxdepth: 1
+   :caption: For developers:
+
+   developers.rst
+	     
+    
 .. toctree::
    :maxdepth: 1
    :caption: API:
