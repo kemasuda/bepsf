@@ -35,12 +35,7 @@ def test_Umatrix():
     data = np.load(path+"test_image.npz")
     Z, Zerr, fluxes, xcenters, ycenters = data['Z'], data['Zerr'], data['fluxes'], data['xcenters'], data['ycenters']
     im = PixelImage(Z.shape[0], Z.shape[1])
-    im.Z = Z
-    im.Zerr = Zerr
     g = model()
-    lenx, leny = 1., 1.
-    amp2 = np.exp(-4.*2)
-    mupsf = 0.
     U = g.U_matrix(fluxes, xcenters, ycenters, im.X1d, im.Y1d)
     assert np.sum(U) == pytest.approx(1504.30322322)
 
