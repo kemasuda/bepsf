@@ -8,7 +8,6 @@ from functools import partial
 from jax import vmap
 import numpyro.distributions as dist
 
-
 class GridePSFModel:
     def __init__(self, x_extent, y_extent, dx, dy):
         """ define ePSF via grid interpolation
