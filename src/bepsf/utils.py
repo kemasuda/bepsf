@@ -16,12 +16,11 @@ import corner
 import pandas as pd
 from arviz import plot_trace
 
-
 def plot_image(image, xcenters=None, ycenters=None, title=None):
     """ plot 2D image (PixelImage class) """
 
     if image.Z is None:
-        assert ValueError("no value is set.")
+        raise ValueError("no value is set.")
 
     plt.figure()
     plt.imshow(image.Z,
@@ -102,9 +101,7 @@ def check_solution(image_obs,
 
     """
     if p is None and samples is None:
-        assert ValueError(
-            "Provide either a parameter dict (p) or posterior samples (samples)."
-        )
+        raise ValueError("Provide either a parameter dict (p) or posterior samples (samples).")
 
     idx_anchor = image_obs.idx_anchor
 
