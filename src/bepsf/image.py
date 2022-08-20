@@ -15,29 +15,41 @@ class PixelImage:
            dx, dy: grid spacing (normally 1, just count the pixel number)
 
         """
-        self.xmin, self.xmax = xmin, xmax
-        self.ymin, self.ymax = ymin, ymax
-        self.Nx = int((xmax - xmin) / dx)
-        self.Ny = int((ymax - ymin) / dy)
+        self.dx, self.Nx, self.xmin, self.xmax, self.xgrid_edge, self.xgrid_center = self.set_grid(
+            dx, xmin, xmax)
+        self.dy, self.Ny, self.ymin, self.ymax, self.ygrid_edge, self.ygrid_center = self.set_grid(
+            dy, ymin, ymax)
+        self.set_meshgrid()
+
+    def set_grid(self, dq, qmin, qmax):
+        """set 1-D grid
+
+        Args:
+            dq (float): grid width for q-direction (q = x or y)
+            qmin (float): minimum of q
+            qmax (float): maximum of q
+
+        Returns:
+            grid width, number of the grid, minimum, maximum, grid edge, grid center
+        """
+        Nq = int((qmax - qmin) / dq)
+        qgrid_edge = jnp.linspace(qmin, qmax, Nq + 1)
+        qgrid_center = 0.5 * (qgrid_edge[1:] + qgrid_edge[:-1])
+        return dq, Nq, qmin, qmax, qgrid_edge, qgrid_center
+
+    def set_meshgrid(self):
+        """set 2D mesh grid
+        """
         self.shape = (self.Nx, self.Ny)
         self.size = self.Nx * self.Ny
-        self.ds = dx * dy
-
-        self.xgrid_edge = jnp.linspace(xmin, xmax, self.Nx + 1)
-        self.ygrid_edge = jnp.linspace(ymin, ymax, self.Ny + 1)
-        self.xgrid_center = 0.5 * (self.xgrid_edge[1:] + self.xgrid_edge[:-1])
-        self.ygrid_center = 0.5 * (self.ygrid_edge[1:] + self.ygrid_edge[:-1])
-
-        X, Y = jnp.meshgrid(self.xgrid_center, self.ygrid_center)
-        self.X = X
-        self.Y = Y
+        self.ds = self.dx * self.dy
+        self.X, self.Y = jnp.meshgrid(self.xgrid_center, self.ygrid_center)
         self.X1d = jnp.tile(self.xgrid_center, self.Ny)
         self.Y1d = jnp.repeat(self.ygrid_center, self.Nx)
         self.Z = None  #-1 * jnp.ones_like(X) # in case Z.shape is needed
         self.Zerr = None
-        self.mask = np.array(X)**2 < 0.
+        self.mask = np.array(self.X)**2 < 0.
         self.mask1d = self.mask.ravel()
-
         self.xinit = None
         self.yinit = None
         self.lnfinit = None
