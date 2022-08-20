@@ -15,15 +15,13 @@ from scipy.stats import median_abs_deviation
 import corner
 import pandas as pd
 from arviz import plot_trace
-import warnings
 
 
 def plot_image(image, xcenters=None, ycenters=None, title=None):
     """ plot 2D image (PixelImage class) """
 
     if image.Z is None:
-        warnings.warn("no value is set.", UserWarning)
-        return None
+        assert ValueError("no value is set.")
 
     plt.figure()
     plt.imshow(image.Z,
@@ -104,10 +102,9 @@ def check_solution(image_obs,
 
     """
     if p is None and samples is None:
-        warnings.warn(
-            "Provide either a parameter dict (p) or posterior samples (samples).",
-            UserWarning)
-        return None
+        assert ValueError(
+            "Provide either a parameter dict (p) or posterior samples (samples)."
+        )
 
     idx_anchor = image_obs.idx_anchor
 
