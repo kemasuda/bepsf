@@ -4,9 +4,9 @@ import jax.numpy as jnp
 import numpy as np
 from jax import vmap
 
+
 class PixelImage:
     """ class for 2D images """
-
     def __init__(self, xmax, ymax, xmin=0., ymin=0., dx=1., dy=1.):
         """ initialization
 
@@ -23,8 +23,8 @@ class PixelImage:
         self.size = self.Nx * self.Ny
         self.ds = dx * dy
 
-        self.xgrid_edge = jnp.linspace(xmin, xmax, self.Nx+1)
-        self.ygrid_edge = jnp.linspace(ymin, ymax, self.Ny+1)
+        self.xgrid_edge = jnp.linspace(xmin, xmax, self.Nx + 1)
+        self.ygrid_edge = jnp.linspace(ymin, ymax, self.Ny + 1)
         self.xgrid_center = 0.5 * (self.xgrid_edge[1:] + self.xgrid_edge[:-1])
         self.ygrid_center = 0.5 * (self.ygrid_edge[1:] + self.ygrid_edge[:-1])
 
@@ -33,7 +33,7 @@ class PixelImage:
         self.Y = Y
         self.X1d = jnp.tile(self.xgrid_center, self.Ny)
         self.Y1d = jnp.repeat(self.ygrid_center, self.Nx)
-        self.Z = None #-1 * jnp.ones_like(X) # in case Z.shape is needed
+        self.Z = None  #-1 * jnp.ones_like(X) # in case Z.shape is needed
         self.Zerr = None
         self.mask = np.array(X)**2 < 0.
         self.mask1d = self.mask.ravel()
@@ -56,15 +56,17 @@ class PixelImage:
 
     def circular_aperture_index(self, xc, yc, radius):
         """ 2D index for a circular aperture around (xc, yc) with a given radius"""
-        return jnp.sqrt((self.X-xc)**2+(self.Y-yc)**2) < radius
+        return jnp.sqrt((self.X - xc)**2 + (self.Y - yc)**2) < radius
 
     def aperture_photometry(self, xcenters, ycenters, radius):
         """ performs aperture photometry for multiple sources """
         def single(x, y, radius):
             idx_ap = self.circular_aperture_index(x, y, radius)
-            flux_ap = jnp.where(idx_ap, self.Z, self.Z*0.)
-            return jnp.sum(flux_ap), jnp.average(self.X, weights=flux_ap), jnp.average(self.Y, weights=flux_ap)
-        func = vmap(single, (0,0,None), 0)
+            flux_ap = jnp.where(idx_ap, self.Z, self.Z * 0.)
+            return jnp.sum(flux_ap), jnp.average(
+                self.X, weights=flux_ap), jnp.average(self.Y, weights=flux_ap)
+
+        func = vmap(single, (0, 0, None), 0)
         return func(xcenters, ycenters, radius)
 
     def define_mask(self, xcenters, ycenters, limit_dist):
@@ -76,12 +78,14 @@ class PixelImage:
 
         """
         # distance matrix (# of sources) x (# of pixels)
-        distances = np.sqrt((self.X1d[None,:]-xcenters[:,None])**2 + (self.Y1d[None,:]-ycenters[:,None])**2)
+        distances = np.sqrt((self.X1d[None, :] - xcenters[:, None])**2 +
+                            (self.Y1d[None, :] - ycenters[:, None])**2)
         minimum_dist = np.min(distances, axis=0)
         mask1d = minimum_dist > limit_dist
         mask = mask1d.reshape(*self.shape)
         self.mask = mask
         self.mask1d = mask1d
+
 
 def super_to_obs(Z_super, Z_obs):
     """ convert 2d supersampled image to undersampled image by summing flux
@@ -98,4 +102,5 @@ def super_to_obs(Z_super, Z_obs):
     Ms, Ns = Z_super.shape
     Mobs, Nobs = Z_obs.shape
     K, L = Ms // Mobs, Ns // Nobs
-    return Z_super[:Mobs*K, :Nobs*L].reshape(Mobs, K, Nobs, L).sum(axis=(1, 3))
+    return Z_super[:Mobs * K, :Nobs * L].reshape(Mobs, K, Nobs,
+                                                 L).sum(axis=(1, 3))
