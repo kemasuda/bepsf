@@ -18,39 +18,48 @@ class GridePSFModel:
            dx, dy: grid spacing (in units of observed pixels)
 
         """
-        Nx = int(x_extent / dx // 2) * 2 + 1
-        Ny = int(y_extent / dy // 2) * 2 + 1
-        xgrid_edge = jnp.linspace(-0.5 * dx, (Nx - 0.5) * dx, Nx + 1)
-        ygrid_edge = jnp.linspace(-0.5 * dy, (Ny - 0.5) * dy, Ny + 1)
-        xgrid_center = 0.5 * (xgrid_edge[1:] + xgrid_edge[:-1])
-        ygrid_center = 0.5 * (ygrid_edge[1:] + ygrid_edge[:-1])
-        xm, ym = jnp.median(xgrid_center), jnp.median(ygrid_center)
+        self.dx, self.Nx, self.xmin, self.xmax, self.xgrid_edge, self.xgrid_center = self.set_grid(
+            dx, x_extent)
+        self.dy, self.Ny, self.ymin, self.ymax, self.ygrid_edge, self.ygrid_center = self.set_grid(
+            dy, y_extent)
+        self.set_meshgrid()
+        self.print_grid_information()
 
-        self.xmin, self.xmax = xgrid_edge.min(), xgrid_edge.max()
-        self.ymin, self.ymax = ygrid_edge.min(), ygrid_edge.max()
-        self.Nx = Nx
-        self.Ny = Ny
-        self.xgrid_edge = xgrid_edge - xm
-        self.ygrid_edge = ygrid_edge - ym
-        self.xgrid_center = xgrid_center - xm
-        self.ygrid_center = ygrid_center - ym
-        X, Y = jnp.meshgrid(self.xgrid_center, self.ygrid_center)
-        self.X = X
-        self.Y = Y
+    def set_grid(self, dq, q_extent):
+        """set a 1-D grid
+
+        Args:
+            dq (float): grid width for q-direction (q = x or y)
+            q_extent (float): size of the ePSF model grid for q-direction
+
+        Returns:
+            grid width, number of the grid, minimum, maximum, grid edge, grid center
+        """
+        Nq = int(q_extent / dq // 2) * 2 + 1
+        qgrid_edge_ = jnp.linspace(-0.5 * dq, (Nq - 0.5) * dq, Nq + 1)
+        qgrid_center_ = 0.5 * (qgrid_edge_[1:] + qgrid_edge_[:-1])
+        qm = jnp.median(qgrid_center_)
+        qmin, qmax = qgrid_edge_.min(), qgrid_edge_.max()
+        qgrid_edge = qgrid_edge_ - qm
+        qgrid_center = qgrid_center_ - qm
+        return dq, Nq, qmin, qmax, qgrid_edge, qgrid_center
+
+    def set_meshgrid(self):
+        """set mesh grid
+        """
+        self.X, self.Y = jnp.meshgrid(self.xgrid_center, self.ygrid_center)
         self.X1d = jnp.tile(self.xgrid_center, self.Ny)
         self.Y1d = jnp.repeat(self.ygrid_center, self.Nx)
-
-        self.dx = dx
-        self.dy = dy
-        self.ds = dx * dy
-        self.Nx = Nx
-        self.Ny = Ny
+        self.ds = self.dx * self.dy
         self.shape = (self.Nx, self.Ny)
         self.size = self.Nx * self.Ny
         self.eye = jnp.eye(self.size)
         self.pixarea = (self.xgrid_edge.max() - self.xgrid_edge.min()) * (
             self.ygrid_edge.max() - self.ygrid_edge.min())
 
+    def print_grid_information(self):
+        """print information
+        """
         print("PSF grid shape:", self.shape)
         print("grid edge: x=[%f, %f], y=[%f, %f]" %
               (self.xgrid_edge[0], self.xgrid_edge[-1], self.ygrid_edge[0],
