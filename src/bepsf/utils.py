@@ -89,7 +89,9 @@ def check_solution(image_obs,
                    ycenters,
                    fluxes,
                    p=None,
-                   samples=None):
+                   samples=None,
+                   savefig_position="position.png",
+                   savefig_flux="flux.png"):
     """ utility function to check accuracy of a solution
         given as a parameter set (p) or posterior samples (samples)
 
@@ -98,6 +100,8 @@ def check_solution(image_obs,
             xcenters, ycenters, fluxes: true (known) positions and fluxes of the sources
             p: parameter set
             samples: posterior samples
+            savefig_position: figure filename for position
+            savefig_flux: figure filename for flux
 
     """
     if p is None and samples is None:
@@ -154,7 +158,9 @@ def check_solution(image_obs,
                  label="$\Delta x=%.3f\pm%.3f$\n$\Delta y=%.3f\pm%.3f$" %
                  (np.mean(dx), np.std(dx), np.mean(dy), np.std(dy)))
     plt.legend(loc='best', bbox_to_anchor=(1, 1))
-
+    plt.savefig(savefig_position)
+    plt.close()
+    
     df = f - ftrue
     plt.figure(figsize=(8, 4))
     plt.xlabel("true flux (relative to anchor)")
@@ -170,7 +176,8 @@ def check_solution(image_obs,
                  label="$\Delta \log_{10} f=%.3f\pm%.3f$" %
                  (np.mean(df), np.std(df)))
     plt.legend(loc='upper right')
-
+    plt.savefig(savefig_flux)
+    plt.close()
 
 def check_mcmc_hyperparameters(mcmc, pnames=['lnlenx', 'lnleny', 'lna']):
     """ trace plot and corner plot """
